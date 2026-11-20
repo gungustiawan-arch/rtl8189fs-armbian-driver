@@ -1,65 +1,98 @@
-# Troubleshooting
+# Pemecahan masalah
 
-## The installer says the SDIO device is missing
+## Installer menyatakan perangkat SDIO tidak ditemukan
 
-The build helper requires SDIO vendor/device ID 024c:f179. Check:
+Skrip build mencari perangkat SDIO dengan vendor/device ID `024c:f179`. Periksa perangkat yang terdeteksi:
 
-    ls /sys/bus/sdio/devices/
-    cat /sys/bus/sdio/devices/mmc0:0001:1/uevent
+```bash
+ls /sys/bus/sdio/devices/
+```
 
-If the device is absent, investigate the Wi-Fi module, board revision, SDIO initialization, and active device tree before compiling. The tested HG680P setup used the P212 device tree. Do not switch DTBs blindly.
+Untuk melihat informasi perangkat, gunakan direktori SDIO yang muncul pada perintah sebelumnya, misalnya:
 
-## Matching kernel headers are missing
+```bash
+cat /sys/bus/sdio/devices/mmc0:0001:1/uevent
+```
 
-The headers must match the running kernel exactly:
+Jika perangkat tidak ditemukan, periksa modul WiFi, revisi board, inisialisasi SDIO, dan device tree yang sedang digunakan. Pengujian ZTE B860H V1 menggunakan device tree P212. Jangan mengganti DTB tanpa memastikan kecocokannya.
 
-    uname -r
-    readlink -f /lib/modules/$(uname -r)/build
-    make -s -C /lib/modules/$(uname -r)/build kernelrelease
+## Kernel header yang sesuai tidak ditemukan
 
-Install the exact Armbian/Ophub header package for the running kernel. Do not compile against generic headers or another kernel release.
+Kernel header harus cocok dengan kernel yang sedang berjalan. Periksa:
 
-## The compatibility patch does not apply
+```bash
+uname -r
+readlink -f /lib/modules/$(uname -r)/build
+cat /lib/modules/$(uname -r)/build/include/generated/utsrelease.h
+```
 
-The build script pins upstream commit 786a5816a3731d57aee9eaa97744b89c4b799417. The maintained patch was checked against that revision. If the source checkout was manually changed, preserve it and choose a fresh BUILD_DIR. Do not force-apply a patch with rejected hunks.
+Pastikan nilai `UTS_RELEASE` pada header sama dengan keluaran `uname -r`. Pasang paket header Armbian/Ophub yang tepat untuk kernel aktif. Jangan membangun module menggunakan header generik atau header dari kernel lain.
 
-## Compilation fails
+## Patch kompatibilitas tidak dapat diterapkan
 
-The installer already supplies the tested compatibility flags:
+Skrip build menggunakan source upstream pada commit tetap:
 
-    CONFIG_CC_HAS_MIN_FUNCTION_ALIGNMENT=
-    KCFLAGS=-Wno-error
+```text
+786a5816a3731d57aee9eaa97744b89c4b799417
+```
 
-The full build log is stored as build-KERNEL.log under BUILD_DIR. A compiler warning is not the same as a successful build; the installer still requires a valid 8189fs.ko and matching vermagic.
+Patch proyek disiapkan untuk revisi tersebut. Jika source checkout pernah diubah secara manual, simpan salinannya dan gunakan direktori `BUILD_DIR` baru untuk pengujian. Jangan memaksa patch diterapkan jika ada bagian yang ditolak.
 
-If the failure is caused by missing commands, rerun bash install.sh so it can install build prerequisites. If matching headers are incomplete or unavailable, install the correct Armbian/Ophub headers first.
+## Kompilasi gagal
 
-## Module reports unknown symbols
+Skrip build saat ini menjalankan proses kompilasi dengan parameter:
 
-Check that the module declares cfg80211 and let modprobe resolve dependencies:
+```text
+CONFIG_CC_HAS_MIN_FUNCTION_ALIGNMENT=
+KCFLAGS=-Wno-error
+```
 
-    modinfo 8189fs
-    sudo modprobe cfg80211
-    sudo modprobe 8189fs
-    dmesg | tail -n 80
+Parameter tersebut diberikan oleh skrip build. Keduanya belum dibuktikan sebagai kebutuhan universal untuk semua kernel atau compiler.
 
-If unresolved symbols remain, confirm that the module was built against the exact running kernel headers. Do not force-load a module built for another kernel.
+Log lengkap disimpan dengan nama `build-KERNEL.log` di dalam `BUILD_DIR`. Periksa bagian akhir log untuk menemukan error kompilasi. Peringatan compiler tidak sama dengan build yang berhasil; skrip tetap memerlukan file `8189fs.ko` yang valid dengan `vermagic` sesuai kernel aktif.
 
-## Module exists but Wi-Fi does not connect
+Jika perintah build belum tersedia, jalankan kembali `bash install.sh` agar installer dapat memasang paket prasyarat. Jika kernel header tidak lengkap atau tidak tersedia, pasang header Armbian/Ophub yang benar terlebih dahulu.
 
-Collect a diagnostic report:
+## Module melaporkan simbol yang tidak dikenal
 
-    bash scripts/diagnose.sh
+Periksa metadata dependensi dan pesan kernel:
 
-Then inspect:
+```bash
+modinfo 8189fs
+sudo modprobe cfg80211
+sudo modprobe 8189fs
+dmesg | tail -n 80
+```
 
-    rfkill list
-    ip link
-    nmcli device status
-    dmesg | grep -iE '8189|wlan|firmware|sdio' | tail -n 100
+Pastikan module dibangun menggunakan kernel header yang tepat untuk kernel aktif. Jangan memaksa memuat module yang dibuat untuk kernel lain.
 
-The verified test used wlan0 as the primary interface. wlan0 and wlan1 were virtual interfaces of one physical SDIO radio, not two separate adapters.
+## File module tersedia, tetapi WiFi tidak dapat terhubung
 
-## Module does not load after a kernel update
+Kumpulkan laporan diagnostik:
 
-External modules are specific to a kernel ABI/build. Re-run the installer after installing the new kernel's exact matching headers. The installer will warn if the kernel is not the project's exact tested kernel and will stop if the compatibility patch does not apply or the resulting vermagic does not match.
+```bash
+bash scripts/diagnose.sh
+```
+
+Kemudian periksa:
+
+```bash
+rfkill list
+ip link
+nmcli device status
+dmesg | grep -iE '8189|wlan|firmware|sdio' | tail -n 100
+```
+
+Pada pengujian ZTE B860H V1, `wlan0` digunakan sebagai interface utama. Interface `wlan0` dan `wlan1` merupakan interface virtual dari satu radio SDIO yang sama, bukan dua adapter fisik yang terpisah.
+
+## Module tidak dimuat setelah kernel diperbarui
+
+External module terikat pada kernel build tertentu. Setelah kernel diperbarui, pasang kernel header yang tepat untuk kernel baru lalu jalankan kembali proses build dan instalasi.
+
+Jangan menganggap module dari kernel sebelumnya tetap kompatibel. Periksa `vermagic`, pastikan module dapat dimuat, lalu uji pemindaian WiFi, koneksi, konektivitas, dan pemuatan otomatis setelah reboot.
+
+## Installer menampilkan peringatan kernel belum diuji
+
+Saat ini skrip build masih menggunakan `6.12.114-ophub` sebagai versi kernel yang ditandai telah diuji secara khusus. Pengujian manual B860H V1 yang didokumentasikan di README menggunakan `6.12.117-ophub`.
+
+Karena penanda versi di skrip belum diselaraskan, build pada `6.12.117-ophub` dapat menampilkan peringatan dan meminta konfirmasi. Catat peringatan tersebut; jangan menyamakan keberhasilan build otomatis dengan keberhasilan uji runtime.
