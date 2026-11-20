@@ -1,69 +1,150 @@
-# Installation and build workflow
+# Panduan instalasi dan build
 
-## Tested scope
+## Perangkat yang sudah diuji
 
-The only fully tested configuration is FiberHome HG680P (Amlogic S905X), Armbian 26.11.0 Ubuntu Noble ARM64, kernel 6.12.114-ophub, and RTL8189FS SDIO ID 024c:f179. The tested setup used the P212 device tree.
+Pengujian manual yang berhasil dilakukan pada konfigurasi berikut:
 
-The installer checks architecture, kernel headers, SDIO ID, patch applicability, module vermagic, and cfg80211 dependency. A successful build on another kernel is not proof of runtime compatibility.
+| Komponen | Konfigurasi |
+|---|---|
+| Perangkat | ZTE B860H V1 |
+| SoC | Amlogic S905X |
+| Sistem operasi | Armbian 26.11.0 Ubuntu Noble Server ARM64 |
+| Kernel | `6.12.117-ophub` |
+| Device tree | P212 |
+| WiFi | Realtek RTL8189FS |
+| ID SDIO | `024c:f179` |
 
-## 1. Obtain this project
+Hasil tersebut membuktikan driver dapat dibangun, dipasang, dimuat, digunakan untuk memindai dan terhubung ke jaringan WiFi, serta dimuat kembali setelah reboot pada perangkat uji tersebut.
 
-    git clone https://github.com/Ag2sap/HG680P-WiFi-Fix-Armbian-ARM64-RTL8189FS-Driver-Kernel-6.12-.git
-    cd HG680P-WiFi-Fix-Armbian-ARM64-RTL8189FS-Driver-Kernel-6.12-
+**Batas pengujian:** hasil di atas berasal dari proses build dan instalasi manual. Pengujian installer otomatis dari awal sampai akhir masih belum selesai. Keberhasilan build pada kernel lain tidak otomatis membuktikan kompatibilitas saat dijalankan.
 
-## 2. Choose a build location
+## 1. Siapkan repository
 
-The temporary source/build workspace and logs can consume storage. Set BUILD_DIR to a writable data disk when available:
+Pastikan Git tersedia:
 
-    BUILD_DIR=/media/devmon/HardDisk/rtl8189fs-build bash install.sh
+```bash
+git --version
+```
 
-If unset, the installer uses ~/.local/share/hg680p-rtl8189fs. Two parallel jobs are used by default; set JOBS=1 or JOBS=2 to override.
+Jika belum tersedia, pasang Git melalui pengelola paket Armbian/Debian, kemudian clone repository:
 
-## 3. Run
+```bash
+git clone https://github.com/gungustiawan-arch/rtl8189fs-armbian-driver.git
+cd rtl8189fs-armbian-driver
+```
 
-Run as the normal user, not with sudo:
+## 2. Tentukan direktori build
 
-    bash install.sh
+Source, file hasil kompilasi, dan log membutuhkan ruang penyimpanan. Jika tersedia HDD eksternal, arahkan `BUILD_DIR` ke direktori pada disk tersebut:
 
-The installer uses sudo for missing prerequisites, module installation, depmod, and boot-time loading. Missing build packages are installed through apt. Matching kernel headers are required; if the exact linux-headers-KERNEL package is unavailable, install matching Armbian/Ophub headers manually and rerun.
+```bash
+BUILD_DIR=/lokasi/disk/rtl8189fs-build bash install.sh
+```
 
-## 4. Automated workflow
+Jika tidak ditentukan, direktori kerja default adalah:
 
-1. Checks ARM64 architecture and SDIO ID 024c:f179.
-2. Confirms headers match uname -r.
-3. Checks for a local prebuilt module, then attempts to download a kernel-specific asset from the latest GitHub Release.
-4. Verifies release asset SHA-256, module vermagic, and cfg80211 dependency.
-5. If no verified prebuilt is available, fetches the pinned upstream source and applies the maintained kernel 6.12 callback patch.
-6. Builds using CONFIG_CC_HAS_MIN_FUNCTION_ALIGNMENT= and KCFLAGS=-Wno-error.
-7. Verifies module output and matching vermagic/dependency metadata. After a successful build, removes the downloaded source tree and compiler artifacts by default; the verified module and build log remain in BUILD_DIR. Set KEEP_SOURCE=1 to retain the source tree for debugging.
-8. Requests confirmation before system-level installation.
-9. Installs under /lib/modules/KERNEL/updates/, runs depmod, and enables boot-time loading.
+```text
+~/.local/share/hg680p-rtl8189fs
+```
 
-A pre-existing module at the destination is backed up under /var/backups/hg680p-rtl8189fs. Existing module-load configuration is preserved. The installer records which files it created so uninstall does not remove a pre-existing configuration.
+Installer menggunakan dua pekerjaan paralel secara default. Pada perangkat dengan RAM terbatas, gunakan satu pekerjaan:
 
-## 5. Prebuilt module release
+```bash
+JOBS=1 bash install.sh
+```
 
-The latest release must provide two assets for the exact kernel:
+## 3. Jalankan installer
 
-- 8189fs-KERNEL.ko
-- 8189fs-KERNEL.ko.sha256
+Jalankan sebagai pengguna biasa, tanpa `sudo`:
 
-Generate the checksum file alongside the module using:
+```bash
+bash install.sh
+```
 
-    sha256sum 8189fs-KERNEL.ko > 8189fs-KERNEL.ko.sha256
+Installer meminta autentikasi `sudo` di awal dan menggunakan hak administrator untuk memasang paket yang diperlukan serta melakukan perubahan pada sistem. Jika paket build belum tersedia, installer dapat menjalankan `apt-get update` dan memasang paket seperti `build-essential`, `git`, `patch`, `bc`, atau `kmod`.
 
-The actual prebuilt for 6.12.114-ophub has not yet been uploaded. On the tested device, run `bash scripts/stage-prebuilt.sh` from the repository checkout to stage the already-installed module under `prebuilt/$(uname -r)/8189fs.ko`; commit it and push a version tag to publish the release assets. Until then, the installer falls back to source compilation. Do not use the upstream 6.1.170-ophub module on kernel 6.12.114-ophub.
+Kernel header harus cocok dengan kernel yang sedang berjalan. Jika paket `linux-headers-KERNEL` tidak tersedia, pasang header Armbian/Ophub yang tepat secara manual, lalu jalankan kembali installer.
 
-## 6. Diagnostics and uninstall
+## 4. Alur kerja installer
 
-    bash scripts/diagnose.sh
-    sudo bash scripts/uninstall.sh
+Secara berurutan, installer melakukan hal berikut:
 
-Uninstall asks for confirmation, unloads the driver if it is not in use, removes this project's module and only its own boot-load configuration, restores the latest backed-up module if present, and runs depmod.
+1. Memastikan installer dijalankan oleh pengguna biasa.
+2. Memeriksa ketersediaan utilitas yang diperlukan.
+3. Mencari module lokal atau cache yang cocok dengan kernel aktif.
+4. Mencoba mengambil prebuilt module dari GitHub Release jika tersedia.
+5. Jika prebuilt yang valid tidak tersedia, menyiapkan paket build dan kernel header.
+6. Menjalankan skrip build untuk memeriksa arsitektur ARM64, header kernel, dan perangkat SDIO `024c:f179`.
+7. Mengambil source dari repository upstream pada commit yang sudah dipatok.
+8. Memeriksa dan menerapkan patch kompatibilitas callback `cfg80211`.
+9. Membangun module, lalu memeriksa `vermagic` dan dependensi `cfg80211`.
+10. Menampilkan lokasi module dan meminta persetujuan sebelum instalasi sistem.
+11. Memasang module ke `/lib/modules/KERNEL/updates/`, menjalankan `depmod`, dan mengatur pemuatan saat boot.
 
-## Safety notes
+Hasil build dan log disimpan di `BUILD_DIR`. Source tree dan file sementara compiler dihapus secara default setelah build berhasil. Gunakan `KEEP_SOURCE=1` jika source tree perlu dipertahankan untuk pemeriksaan.
 
-- Keep Ethernet or another recovery path available.
-- Do not change the device tree blindly. The tested setup used P212; an incorrect DTB can prevent boot.
-- On kernels other than 6.12.114-ophub, the installer warns and requires confirmation. The patch must still apply cleanly and the built module must match the running kernel.
-- Matching vermagic is necessary but does not guarantee runtime compatibility. Test scanning, connection, connectivity, and reboot persistence before relying on another kernel.
+### Peringatan kernel yang perlu diketahui
+
+Skrip build saat ini masih menganggap `6.12.114-ophub` sebagai kernel yang diuji secara khusus. Perangkat B860H V1 kita menggunakan `6.12.117-ophub`, yang sudah berhasil diuji secara manual. Karena perbedaan ini, skrip akan menampilkan peringatan dan meminta konfirmasi saat build pada kernel tersebut. Jangan mengabaikan peringatan untuk kernel lain tanpa pengujian.
+
+### Catatan pemasangan module
+
+Jika module lama sudah ada di lokasi tujuan, skrip instalasi menyalinnya ke:
+
+```text
+/var/backups/hg680p-rtl8189fs
+```
+
+Konfigurasi autoload dibuat di:
+
+```text
+/etc/modules-load.d/hg680p-rtl8189fs.conf
+```
+
+Jika file konfigurasi tersebut sudah ada dan tidak berisi satu baris `8189fs` secara terpisah, installer menolak mengubahnya.
+
+Saat ini skrip instalasi belum memiliki mekanisme rollback otomatis untuk setiap kegagalan setelah file module atau konfigurasi mulai ditulis. Jika instalasi gagal, simpan pesan error dan log sebelum melakukan tindakan pemulihan.
+
+## 5. Prebuilt module
+
+Prebuilt module harus dibuat untuk kernel dan build yang tepat. Nama file Release yang didukung installer adalah:
+
+```text
+8189fs-KERNEL.ko
+8189fs-KERNEL.ko.sha256
+```
+
+Checksum dibuat dengan:
+
+```bash
+sha256sum 8189fs-KERNEL.ko > 8189fs-KERNEL.ko.sha256
+```
+
+**Status saat ini:** repository belum memiliki prebuilt module resmi atau GitHub Release yang dipublikasikan. Installer akan menggunakan jalur build dari source jika tidak menemukan prebuilt yang lolos pemeriksaan. Jangan menggunakan module dari kernel lain hanya karena nomor versi utamanya sama.
+
+Lihat [Kebijakan Prebuilt Module](PREBUILT-MODULE.md).
+
+## 6. Diagnostik dan penghapusan
+
+Untuk mengumpulkan informasi sistem dan driver:
+
+```bash
+bash scripts/diagnose.sh
+```
+
+Untuk menghapus instalasi yang dicatat oleh installer:
+
+```bash
+sudo bash scripts/uninstall.sh
+```
+
+Skrip uninstall meminta konfirmasi, mencoba melepas module jika sedang aktif, menghapus file module milik instalasi ini, menghapus konfigurasi autoload jika konfigurasi tersebut dibuat oleh installer, dan memulihkan cadangan terbaru jika tersedia.
+
+**Perhatian:** proses pemulihan cadangan belum memeriksa `vermagic` module cadangan dan tidak otomatis memuat ulang module yang dipulihkan. Periksa kecocokan kernel sebelum menggunakan module hasil pemulihan.
+
+## Catatan keselamatan
+
+- Sediakan koneksi Ethernet atau jalur pemulihan lain sebelum memasang driver.
+- Jangan mengganti device tree tanpa memastikan kecocokannya. Device tree yang salah dapat menyebabkan perangkat gagal boot.
+- Kecocokan `vermagic` merupakan pemeriksaan penting, tetapi bukan jaminan kompatibilitas saat driver dijalankan.
+- Setelah memasang driver pada perangkat atau kernel lain, uji pemindaian WiFi, koneksi, konektivitas, dan pemuatan setelah reboot.
