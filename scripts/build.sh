@@ -22,7 +22,7 @@ for cmd in git patch make gcc bc modinfo; do
     command -v "$cmd" >/dev/null 2>&1 || fail "Required command $cmd is missing. Run install.sh first."
 done
 
-HEADER_RELEASE=$(make -s -C "$KERNEL_BUILD" kernelrelease)
+HEADER_RELEASE=$(sed -n 's/^#define UTS_RELEASE "\(.*\)"/\1/p' "$KERNEL_BUILD/include/generated/utsrelease.h")
 [ "$HEADER_RELEASE" = "$KVER" ] || fail "Header release $HEADER_RELEASE does not match running kernel $KVER."
 
 SDIO_FOUND=0

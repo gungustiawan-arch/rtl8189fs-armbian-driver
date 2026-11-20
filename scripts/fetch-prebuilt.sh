@@ -3,7 +3,7 @@ set -Eeuo pipefail
 DEST_DIR="$1"
 KVER="$2"
 ASSET="8189fs-$KVER.ko"
-BASE_URL="https://github.com/Ag2sap/HG680P-Armbian-Kernel-6.12-RTL8189FS-WiFi-Fix/releases/latest/download"
+BASE_URL="https://github.com/gungustiawan-arch/rtl8189fs-armbian-driver/releases/latest/download"
 mkdir -p "$DEST_DIR"
 WORK_DIR=$(mktemp -d "$DEST_DIR/.download-$KVER.XXXXXX")
 trap 'rm -rf "$WORK_DIR"' EXIT

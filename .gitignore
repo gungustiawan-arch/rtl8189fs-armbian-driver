@@ -16,3 +16,4 @@ Module.symvers
 modules.order
 .DS_Store
 Thumbs.db
+*.bak
