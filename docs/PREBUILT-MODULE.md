@@ -1,43 +1,68 @@
-# Prebuilt module policy
+# Kebijakan prebuilt module
 
-Prebuilt modules are kernel-build specific. They are not interchangeable merely because two kernels share the 6.12 version family.
+Prebuilt module bergantung pada kernel build tertentu. Dua kernel yang sama-sama berada pada keluarga versi 6.12 belum tentu dapat menggunakan module yang sama.
 
-## Required checks before publishing
+## Pemeriksaan sebelum menerbitkan prebuilt
 
-1. Build against the exact matching kernel headers.
-2. Confirm the first field of modinfo -F vermagic 8189fs.ko exactly matches uname -r.
-3. Confirm modinfo -F depends 8189fs.ko includes cfg80211.
-4. Confirm modprobe loads the module.
-5. Confirm SDIO detection and Wi-Fi scanning.
-6. Confirm network connection and connectivity.
-7. Confirm module autoload and Wi-Fi operation after reboot.
-8. Record SHA-256 checksum and tested hardware, image, and kernel details.
+Sebelum module dibagikan sebagai prebuilt, lakukan pemeriksaan berikut:
 
-## Release asset names
+1. Bangun module menggunakan kernel header yang tepat untuk kernel target.
+2. Pastikan bagian pertama dari keluaran `modinfo -F vermagic 8189fs.ko` sama persis dengan keluaran `uname -r`.
+3. Pastikan `modinfo -F depends 8189fs.ko` mencantumkan `cfg80211`.
+4. Pastikan module dapat dimuat dengan `modprobe 8189fs`.
+5. Pastikan perangkat SDIO terdeteksi dan pemindaian jaringan WiFi berhasil.
+6. Pastikan perangkat dapat terhubung ke jaringan dan memiliki konektivitas.
+7. Pastikan module dimuat otomatis dan WiFi berfungsi setelah reboot.
+8. Catat checksum SHA-256 serta detail perangkat, image Armbian, dan kernel yang diuji.
 
-For a kernel release KERNEL, publish both files in the same GitHub Release:
+Kompilasi yang berhasil dan `vermagic` yang cocok belum cukup untuk menyatakan sebuah prebuilt siap digunakan. Pengujian saat driver dijalankan tetap diperlukan.
 
-    8189fs-KERNEL.ko
-    8189fs-KERNEL.ko.sha256
+## Nama file pada GitHub Release
 
-Generate the checksum file in the same directory as the module:
+Untuk kernel dengan nama rilis `KERNEL`, GitHub Release harus menyediakan dua file berikut:
 
-    sha256sum 8189fs-KERNEL.ko > 8189fs-KERNEL.ko.sha256
+```text
+8189fs-KERNEL.ko
+8189fs-KERNEL.ko.sha256
+```
 
-The installer downloads assets from the latest release only when both files exist. It verifies the checksum, vermagic, and cfg80211 dependency before installing. If the assets are absent, it falls back to a source build.
+Buat file checksum di direktori yang sama dengan module:
 
-## Current status
+```bash
+sha256sum 8189fs-KERNEL.ko > 8189fs-KERNEL.ko.sha256
+```
 
-The exact installed module from the tested HG680P has been staged and committed in this repository at:
+Installer dirancang untuk mengambil kedua file dari GitHub Release, lalu memeriksa checksum, `vermagic`, dan dependensi `cfg80211` sebelum memasang module. Jika file yang sesuai tidak tersedia atau pemeriksaannya gagal, installer akan menggunakan jalur build dari source.
 
-    prebuilt/6.12.114-ophub/8189fs.ko
+## Status repository
 
-The staged file's SHA-256 was compared with `/lib/modules/6.12.114-ophub/updates/8189fs.ko` on the test device; both hashes matched:
+Saat ini:
 
-    7714cf5761ef8514c7c88c0c37619cc1c77c8f9002b92cfe4fa0a2d1e3fee735
+- Belum ada prebuilt module resmi yang dipublikasikan di repository.
+- Belum ada GitHub Release untuk driver ini.
+- Module yang berhasil diuji pada B860H V1 berasal dari proses build dan instalasi manual.
+- Pengujian menyeluruh melalui `install.sh` masih belum selesai.
+- Alur pengambilan dan pemasangan prebuilt belum diuji.
 
-The tested environment is HG680P, Amlogic S905X, Armbian 26.11.0 Noble ARM64, kernel 6.12.114-ophub, using the P212 device tree. Wi-Fi scanning, connection, connectivity, and autoload after reboot were verified.
+Perangkat uji manual yang menjadi acuan:
 
-The binary is present in the repository, but the downloadable GitHub Release asset has not yet been published. Push a version tag such as `v1.0.0` to trigger `.github/workflows/release-prebuilt.yml`. The workflow checks each module's vermagic against its directory name, verifies the cfg80211 dependency, generates a SHA-256 file, and creates a GitHub Release with both assets. The installer can use the local matching file from the repository before a release is available.
+| Komponen | Konfigurasi |
+|---|---|
+| Perangkat | ZTE B860H V1 |
+| SoC | Amlogic S905X |
+| Sistem operasi | Armbian 26.11.0 Ubuntu Noble Server ARM64 |
+| Kernel | `6.12.117-ophub` |
+| Device tree | P212 |
+| ID SDIO | `024c:f179` |
 
-Do not substitute the upstream 6.1.170-ophub module; its vermagic is not compatible with 6.12.114-ophub.
+Jangan menerbitkan binary sebagai prebuilt resmi sebelum seluruh pemeriksaan pada dokumen ini selesai dan hasil pengujiannya dicatat. Jangan menggunakan module dari kernel `6.1.170-ophub` atau `6.12.114-ophub` sebagai pengganti module untuk `6.12.117-ophub` tanpa build dan pengujian yang sesuai.
+
+## Penamaan dan checksum
+
+Nama direktori prebuilt lokal mengikuti rilis kernel secara persis:
+
+```text
+prebuilt/KERNEL/8189fs.ko
+```
+
+Simpan checksum bersama artefak rilis dan catat hasil verifikasi. Jangan mengubah nama file agar terlihat cocok dengan kernel lain; nama file tidak mengubah ABI atau kompatibilitas module.
